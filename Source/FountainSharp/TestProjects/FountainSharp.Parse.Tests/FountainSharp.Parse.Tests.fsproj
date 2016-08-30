@@ -60,9 +60,12 @@
     <Reference Include="NHamcrest">
       <HintPath>..\..\packages\FsUnit.2.3.1\lib\net45\NHamcrest.dll</HintPath>
     </Reference>
-    <ProjectReference Include="..\..\PortableProjects\FountainSharp.Parse.MobilePCL\FountainSharp.Parse.MobilePCL.fsproj">
-      <Project>{EF7FFC79-964B-41EC-A90F-BBDE329D2DFD}</Project>
-      <Name>FountainSharp.Parse.MobilePCL</Name>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\FountainSharp.Parse\FountainSharp.Parse.fsproj">
+      <Name>FountainSharp.Parse</Name>
+      <Project>{5c25e5f6-6e91-4497-9da0-cc5f6a1083b7}</Project>
+      <Private>True</Private>
     </ProjectReference>
   </ItemGroup>
 </Project>

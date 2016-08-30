@@ -72,23 +72,24 @@ let noBreak (ctx:FormattingContext) () = ()
 
 //======== This is where all of our span element HTML tags are defined.
 /// Write FountainSpan value to a TextWriter
-let rec formatSpan (ctx:FormattingContext) = function
-  | Literal(str, range) -> ctx.Writer.Write(str)
-  | HardLineBreak (range) -> ctx.Writer.Write("<br />")
-  | Strong(body, range) -> 
+let rec formatSpan (ctx:FormattingContext) {value = v; range = _} =
+  match v with
+  | Literal str -> ctx.Writer.Write str
+  | HardLineBreak -> ctx.Writer.Write("<br />")
+  | Strong body -> 
       ctx.Writer.Write("<strong>")
       formatSpans ctx body
       ctx.Writer.Write("</strong>")
-  | Italic(body, range) -> 
+  | Italic body -> 
       ctx.Writer.Write("<em>")
       formatSpans ctx body
       ctx.Writer.Write("</em>")
-  | Underline(body, range) -> 
+  | Underline body -> 
       // TODO: put this in a css named style
       ctx.Writer.Write("""<span style="text-decoration: underline;">""")
       formatSpans ctx body
       ctx.Writer.Write("</span>")
-  | Note(body, range) -> 
+  | Note body -> 
       // TODO: put this in a css named style
       ctx.Writer.Write("""<span style="color: yellow;">""")
       formatSpans ctx body
@@ -134,7 +135,7 @@ let withInner ctx f =
 /// Write a FountainBlockElement value to a TextWriter
 let rec formatBlockElement (ctx:FormattingContext) block =
   match block with
-  | Section(n, spans, range) -> 
+  | Section(n, spans) -> 
       ctx.Writer.Write("<h" + string n + ">")
 //      if ctx.GenerateHeaderAnchors then
 //        let anchorName = formatAnchor ctx spans
@@ -145,51 +146,51 @@ let rec formatBlockElement (ctx:FormattingContext) block =
 //        formatSpans ctx spans
       formatSpans ctx spans
       ctx.Writer.Write("</h" + string n + ">")
-  | SceneHeading (forced, spans, range) ->
+  | SceneHeading (forced, spans) ->
       ctx.Writer.Write("<div><strong>")
       for span in spans do 
         formatSpan ctx span
       ctx.Writer.Write("</strong></div>")
   | PageBreak ->
       ctx.Writer.Write("<hr>")
-  | Synopses (spans, range) ->
+  | Synopses (spans) ->
       ctx.Writer.Write("""<div style="color:#6cf;">""")
       for span in spans do 
         formatSpan ctx span
       ctx.Writer.Write("</div>")
-  | Lyric (spans, range) ->
+  | Lyric (spans) ->
       ctx.Writer.Write("""<div style="color:#333"><em>""")
       for span in spans do 
         formatSpan ctx span
       ctx.Writer.Write("</em></div>")
-  | Transition (forced, spans, range) ->
+  | Transition (forced, spans) ->
       ctx.Writer.Write("""<div style="text-align:right;"><strong>""")
       //if forced then
       //  ctx.Writer.Write("&gt;")
       for span in spans do 
         formatSpan ctx span
       ctx.Writer.Write("</strong><br/></div>")
-  | Character (forced, spans, range) ->
+  | Character (forced, spans) ->
       ctx.Writer.Write("""<div style="text-align:center;"><br/>""")
       //if forced then
       //  ctx.Writer.Write("@")
       for span in spans do 
         formatSpan ctx span
       ctx.Writer.Write("</div>")
-  | Dialogue (spans, range)
-  | Centered (spans, range) ->
+  | Dialogue (spans)
+  | Centered (spans) ->
       ctx.Writer.Write("""<div style="text-align:center;">""")
       for span in spans do 
         formatSpan ctx span
       ctx.Writer.Write("</div>")
-  | Parenthetical (spans, range) ->
+  | Parenthetical (spans) ->
       ctx.Writer.Write("""<div style="text-align:center;">(""")
       for span in spans do 
         formatSpan ctx span
       ctx.Writer.Write(")</div>")
-  | Action (forced, spans, range) ->
+  | Action (forced, spans) ->
       formatSpans ctx spans
-  | Span(spans, range) -> 
+  | Span(spans) -> 
       formatSpans ctx spans
   ctx.LineBreak()
 

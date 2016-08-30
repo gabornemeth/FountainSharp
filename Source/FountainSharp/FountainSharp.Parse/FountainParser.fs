@@ -83,7 +83,9 @@ let rec parseChars acc input = seq {
   // 2015.01.07 Bryan Costanich - change Lazy.Create to Lazy<char []> because of some ambiguation err when building as a PCL
   let accLiterals = Lazy<char []>.Create(fun () ->
     if List.isEmpty acc then [] 
-    else [Literal(String(List.rev acc |> Array.ofList),(new Range(0,0)))] )
+    else 
+      let literal = List.rev acc |> Array.ofList |> String
+      [{FountainSpanElement.value = Literal literal; range = Range literal.Length}])
 
   match input with 
 
@@ -102,7 +104,7 @@ let rec parseChars acc input = seq {
   | '\r'::'\n'::rest ->
     //System.Diagnostics.Debug.WriteLine("found a hardlinebreak")
     yield! accLiterals.Value
-    yield HardLineBreak(new Range(0,0))
+    yield {value = HardLineBreak; range = Range 1}
     yield! parseChars [] rest
 
 
@@ -119,7 +121,7 @@ let rec parseChars acc input = seq {
   | Emphasized (body, f, rest) ->
       yield! accLiterals.Value
       let body = parseChars [] body |> List.ofSeq
-      yield f(body, (new Range(0,0)))
+      yield {value = f(body); range = Range 1}
       yield! parseChars [] rest
 
   // Notes
@@ -174,18 +176,17 @@ let (|Section|_|) input = //function
           if noHash.Length > 0 && Char.IsWhiteSpace(noHash.Chars(noHash.Length - 1)) 
           then noHash else header
         else header        
-      Some(n, header, rest)
+      Some(n, (header, header.Length), rest)
   | rest ->
       None
 
 // TODO: Scene heading should also look for a line break before and after. 
 /// Recognizes a SceneHeading (prefixed with INT/EXT, etc. or a single period)
 let (|SceneHeading|_|) = function
-  // TODO: Make this StartsWithAnyCaseInsensitive
-  | String.StartsWithAny [ "INT"; "EXT"; "EST"; "INT./EXT."; "INT/EXT"; "I/E" ] heading:string :: rest ->
-     Some(false, heading, rest)
+  | String.StartsWithAnyCaseInsensitive [ "INT"; "EXT"; "EST"; "INT./EXT."; "INT/EXT"; "I/E" ] res:string :: rest ->
+     Some(false, res, rest)
   | String.StartsWith "." heading:string :: rest ->
-     Some(true, heading, rest) 
+     Some(true, (heading, heading.Length), rest) 
   | rest ->
      None
 
@@ -198,14 +199,14 @@ let (|Character|_|) (list:string list) =
       None
     // matches "@McAVOY"
     else if (head.StartsWith "@") then
-      Some(true, head.Substring(1), rest)
+      Some(true, (head.Substring(1), 1), rest)
     // matches "BOB" or "BOB JOHNSON" or "R2D2" but not "25D2"
 #if _MOBILEPCL_
     else if (System.Char.IsUpper (head.[0]) && head.ToCharArray() |> Seq.forall (fun c -> (System.Char.IsUpper c|| System.Char.IsWhiteSpace c || System.Char.IsNumber c))) then
 #else
     else if (System.Char.IsUpper (head.[0]) && head |> Seq.forall (fun c -> (System.Char.IsUpper c|| System.Char.IsWhiteSpace c || System.Char.IsNumber c))) then
 #endif
-      Some(false, head, rest)
+      Some(false, (head, 1), rest)
     // matches "BOB (*)"
     //else if (
     else
@@ -219,7 +220,7 @@ let (|PageBreak|_|) input = //function
     if (fst text) >= 3 then
       match (snd text).Trim() with
       | "" -> //after the trim, there should be nothing left.
-         Some(PageBreak, rest)
+         Some((PageBreak, 1), rest)
       | _ -> 
          None
     else None
@@ -229,14 +230,14 @@ let (|PageBreak|_|) input = //function
 /// Recognizes a synposes (prefixed with `=` sign)
 let (|Synopses|_|) = function
   | String.StartsWith "=" text :: rest ->
-     Some(text, rest)
+     Some((text, text.Length), rest)
   | rest ->
      None
 
 /// Recognizes a Lyric (prefixed with ~)
 let (|Lyric|_|) = function
   | String.StartsWith "~" lyric:string :: rest ->
-      Some(lyric, rest)
+      Some((lyric, lyric.Length), rest)
   | rest ->
       None
 
@@ -244,7 +245,8 @@ let (|Lyric|_|) = function
 let (|Centered|_|) = function
   | String.StartsWith ">" text:string :: rest ->
      if text.EndsWith "<" then //TODO: i'm sure an F# ninja can find a way to combine this with previous line
-       Some(text.Trim().TrimEnd [|'<'|], rest)
+       let trimmedText = text.Trim().TrimEnd [|'<'|]
+       Some((trimmedText, trimmedText.Length), rest)
      else
        None
   | rest ->
@@ -259,7 +261,8 @@ let (|Parenthetical|_|) (lastParsedBlock:FountainSharp.Parse.FountainBlockElemen
      match input with
      | blockContent :: rest ->
         if (blockContent.Trim().StartsWith "(" && blockContent.EndsWith ")") then
-          Some(blockContent.Trim().TrimStart([|'('|]).TrimEnd([|')'|]), rest)
+          let trimmedContent = blockContent.Trim().TrimStart([|'('|]).TrimEnd([|')'|])
+          Some((trimmedContent, trimmedContent.Length), rest)
         else
           None
      | [] -> None
@@ -277,7 +280,7 @@ let (|Dialogue|_|) (lastParsedBlock:FountainSharp.Parse.FountainBlockElement opt
         if blockContent.StartsWith "!" then // guard against forced action
           None
         else
-          Some(blockContent, rest)
+          Some((blockContent, blockContent.Length), rest)
      | [] -> None
   | _ -> None
 
@@ -291,9 +294,10 @@ let (|Transition|_|) (input:string list) =
         None
       elif blockContent.EndsWith "TO:" || blockContent.StartsWith ">" then // TODO: need to check for a hard linebreak after
         if blockContent.StartsWith ">" then
-          Some(true, blockContent.Substring(1), rest) // true for forced
+          Some(true, (blockContent.Substring(1), blockContent.Length - 1) , rest) // true for forced
         else
-          Some(false, blockContent.Trim(), rest)
+          let trimmedContent = blockContent.Trim()
+          Some(false, (trimmedContent, trimmedContent.Length), rest)
       else
        None
    | [] -> None
@@ -319,9 +323,10 @@ let (|Action|_|) input =
         | [] -> None
         | hd::tail ->
           if (hd.StartsWith "!") then
-            Some(true, hd.Substring(1)::tail, rest) // trim off the '!' and smash the list back together
+            let trimmedBody = hd.Substring(1)::tail
+            Some(true, (trimmedBody, trimmedBody.Length), rest) // trim off the '!' and smash the list back together
           else
-            Some(false, matching, rest)
+            Some(false, (matching, matching.Length), rest)
       //| _ -> None
 
 //==== /ACTION
@@ -347,76 +352,74 @@ let rec parseBlocks (ctx:ParsingContext) (lastParsedBlock:FountainBlockElement o
 
   match lines with
   // Recognize remaining types of blocks/paragraphs
-  | SceneHeading(forced, body, rest) ->
-     let item = SceneHeading(forced, parseSpans body, new Range(0,0))
+  | SceneHeading(forced, (body, length), rest) ->
+     let item = SceneHeading(forced, parseSpans body)
+
+     yield item
+     yield! parseBlocks ctx (Some item) rest
+  | Section(n, (body, length), rest) ->
+     let item = Section(n, parseSpans body)
      yield item
      yield! parseBlocks ctx (Some(item)) rest
-  | Section(n, body, rest) ->
-     let item = Section(n, parseSpans body, new Range(0,0))
-     yield item
-     yield! parseBlocks ctx (Some(item)) rest
-  | Character(forced, body, rest) ->
-     let item = Character(forced, parseSpans body, new Range(0,0))
+  | Character(forced, (body, length), rest) ->
+     let item = Character(forced, parseSpans body)
      yield item
      yield! parseBlocks ctx (Some(item)) rest
 
-  | PageBreak(body, rest) ->
+  | PageBreak((body, length), rest) ->
      let item = PageBreak
      yield item
      yield! parseBlocks ctx (Some(item)) rest
-  | Synopses(body, rest) ->
-     let item = Synopses(parseSpans body, new Range(0,0))
+  | Synopses((body, length), rest) ->
+     let item = Synopses(parseSpans body)
      yield item
      yield! parseBlocks ctx (Some(item)) rest
-  | Lyric(body, rest) ->
-     let item = Lyric(parseSpans body, new Range(0,0))
-     yield item
-     yield! parseBlocks ctx (Some(item)) rest
-
-  | Centered(body, rest) ->
-     let item = Centered(parseSpans body, new Range(0,0))
+  | Lyric((body, length), rest) ->
+     let item = Lyric(parseSpans body)
      yield item
      yield! parseBlocks ctx (Some(item)) rest
 
-  | Transition(forced, body, rest) ->
-     let item = Transition(forced, parseSpans body, new Range(0,0))
+  | Centered((body, length), rest) ->
+     let item = Centered(parseSpans body)
+     yield item
+     yield! parseBlocks ctx (Some(item)) rest
+
+  | Transition(forced, (body, length), rest) ->
+     let item = Transition(forced, parseSpans body)
      yield item
      yield! parseBlocks ctx (Some(item)) rest
   
-  | Parenthetical lastParsedBlock (body, rest) ->
-     let item = Parenthetical(parseSpans body, new Range(0,0))
+  | Parenthetical lastParsedBlock ((body, length), rest) ->
+     let item = Parenthetical(parseSpans body)
      yield item
      yield! parseBlocks ctx (Some(item)) rest
 
-  | Dialogue lastParsedBlock (body, rest) ->
-     let item = Dialogue(parseSpans body, new Range(0,0))
+  | Dialogue lastParsedBlock ((body, length), rest) ->
+     let item = Dialogue(parseSpans body)
      yield item
      yield! parseBlocks ctx (Some(item)) rest
 
-  | Action(forced, bodyLines, rest) ->
+  | Action(forced, (bodyLines, length), rest) ->
     // we get multiple lines as a match, so for blank lines we return a hard line break, otherwise we 
     // call parse spans
     let mapFunc bodyLine : FountainSpans = 
-      if (bodyLine = "") then
-        [HardLineBreak(new Range(0,0))]
-      else
-        let kung = parseSpans bodyLine
-        let fu = [HardLineBreak(new Range(0,0))]
-        List.concat ([kung;fu])
+      let lineBreakSpan = [{value = HardLineBreak; range = Range 1}]
+      if bodyLine = "" then lineBreakSpan
+      else List.concat ([parseSpans bodyLine; lineBreakSpan])
 
     //HACK: Action is a block element, so we want ot pull the last HardLineBreak off.
     // we have to do this here because we're adding it on above to every line.
     let foo = List.collect mapFunc bodyLines
-    let goo = foo.GetSlice(Some(0), Some(foo.Length - 2))
+    let goo = foo.GetSlice(Some 0, Some(foo.Length - 2))
 
     // collect is a magic function that concatenates lists
     //let item = Action(List.collect mapFunc bodyLines)
-    let item = Action(forced, goo, new Range(0,0))
+    let item = Action(forced, goo)
 
     yield item
 
     // go on to parse the rest
-    yield! parseBlocks ctx (Some(item)) rest
+    yield! parseBlocks ctx (Some item) rest
 
   //| Lines.TrimBlankStart [] ->
   //   yield Action([HardLineBreak])

@@ -13,6 +13,8 @@ open FountainSharp.Parse.Collections
 // --------------------------------------------------------------------------------------
 
 module String =
+  open System.Globalization
+
   /// Matches when a string is a whitespace or null
   let (|WhiteSpace|_|) s = 
     if String.IsNullOrWhiteSpace(s) then Some() else None
@@ -39,8 +41,15 @@ module String =
 
   /// Matches when a string starts with any of the specified sub-strings
   /// NOTE: BryanC 2016.01.02 - i added the string return so it's more useful and matches the others
-  let (|StartsWithAny|_|) (starts:seq<string>) (text:string) = 
-    if starts |> Seq.exists (text.StartsWith) then Some(text) else None
+  let (|StartsWithAnyCaseInsensitive|_|) (starts:seq<string>) (text:string) = 
+  #if _MOBILEPCL_
+    // TODO: implement w/o invariantculture overload
+    Some ("", -1)
+  #else
+    let matchedAny = starts |> Seq.tryPick (fun s -> 
+      if text.StartsWith(s, true, CultureInfo.InvariantCulture) then Some s else None)
+    if matchedAny.IsSome then Some(text, text.Length) else None
+  #endif
   /// Matches when a string starts with the specified sub-string
   let (|StartsWith|_|) (start:string) (text:string) = 
     if text.StartsWith(start) then Some(text.Substring(start.Length)) else None

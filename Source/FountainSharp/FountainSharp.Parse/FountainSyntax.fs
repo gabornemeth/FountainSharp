@@ -4,99 +4,105 @@ open System
 open System.IO
 open System.Collections.Generic
 
-[<Struct>]
-type Range(location:int,length:int) = 
-  member this.Location = location
-  member this.Length = length
+type IRange =
+  abstract member Length : int
+  abstract member Location : int
 
-  override this.ToString() =
-    sprintf "Location: %d; Length: %d" this.Location this.Length
+type Range(Length: int, ?Location: int) = 
+  member val length = Length with get, set
+  member val location = defaultArg Location -1 with get, set
 
-/// Represents inline formatting inside a block. This can be literal (with text), various
-/// formattings (string, emphasis, etc.), hyperlinks, etc.
+type FountainSpanElementType = 
+  | Literal of string // some text
+  | Strong of FountainSpans // **some bold text**
+  | Italic of FountainSpans // *some italicized text*
+  | Underline of FountainSpans // _some underlined text_
+  | Note of FountainSpans // [[this is my note]]
+  | HardLineBreak
 
-// TODO: implement a base class that has a mutable range, a la: 
-// http://stackoverflow.com/questions/10959335/how-add-setter-to-to-discriminated-unions-in-f
-// http://stackoverflow.com/questions/1332299/discriminated-union-let-binding
-
-type FountainSpanElement =
-  | Literal of string * Range // some text
-  | Strong of FountainSpans * Range // **some bold text**
-  | Italic of FountainSpans * Range // *some italicized text*
-  | Underline of FountainSpans * Range// _some underlined text_
-  | Note of FountainSpans * Range// [[this is my note]]
-  | HardLineBreak of Range
-
-  //let range:Range = new Range(0,0)
-
-  //member fs.Range =
-  //  with get () = range
-  //  and set (value) = range <- value
-
-  // Sigh, if F# allowed lets in DUs, we could cache the length. :(
-  //let mutable length = -1
-
-  member fs.GetLength() : int =
-    match fs with
-    | Strong(spans, r)
-    | Italic(spans, r)
-    | Underline(spans, r)
-    | Note(spans, r) ->
-      spans
-      |> List.map( fun span -> span.GetLength() )
-      |> List.sum
-    | HardLineBreak(r) -> 1
-    | Literal(str, r) -> str.Length
-  
-  member fs.GetRange(start:int):Range =
-    new Range(start, fs.GetLength() + start)
-
-
+and FountainSpanElement = 
+  {value : FountainSpanElementType; range : Range}
+  interface IRange with
+    member o.Length = o.range.length
+    member o.Location = o.range.location
 /// A type alias for a list of `FountainSpan` values
-and FountainSpans = list<FountainSpanElement>
+and FountainSpans = FountainSpanElement list
+
+
+//type FountainSpanElement = 
+//  | Literal of string // some text
+//  | Strong of FountainSpans // **some bold text**
+//  | Italic of FountainSpans // *some italicized text*
+//  | Underline of FountainSpans // _some underlined text_
+//  | Note of FountainSpans // [[this is my note]]
+//  | HardLineBreak
+//
+///// A type alias for a list of `FountainSpan` values
+//and FountainSpans = FountainSpanElement list
+
+
+//  member fs.GetLength() : int =
+//    match fs with
+//    | Strong(spans)
+//    | Italic(spans)
+//    | Underline(spans)
+//    | Note(spans) ->
+//      spans
+//      |> List.map( fun span -> span.GetLength() )
+//      |> List.sum
+//    | HardLineBreak -> 1
+//    | Literal(str) -> str.Length
+  
+
 
 /// A block represents a (possibly) multi-line element of a fountain document.
 /// Blocks are headings, action blocks, dialogue blocks, etc. 
-type FountainBlockElement = 
-  | Action of bool * FountainSpans * Range
-  | Character of bool * FountainSpans * Range //TODO: maybe just FountainSpanElement? or just string?
-  | Dialogue of FountainSpans * Range
-  | Parenthetical of FountainSpans * Range
-  | Section of int * FountainSpans * Range
-  | Synopses of FountainSpans * Range
-  | Span of FountainSpans * Range //TODO: do we even use this?
-  | Lyric of FountainSpans * Range
-  | SceneHeading of bool * FountainSpans * Range //TODO: Should this really just be a single span? i mean, you shouldn't be able to style/inline a scene heading, right?
+type FountainBlockElementType = 
+  | Action of bool * FountainSpans
+  | Character of bool * FountainSpans //TODO: maybe just FountainSpanElement? or just string?
+  | Dialogue of FountainSpans 
+  | Parenthetical of FountainSpans 
+  | Section of int * FountainSpans 
+  | Synopses of FountainSpans 
+  | Span of FountainSpans //TODO: do we even use this?
+  | Lyric of FountainSpans 
+  | SceneHeading of bool * FountainSpans //TODO: Should this really just be a single span? i mean, you shouldn't be able to style/inline a scene heading, right?
   | PageBreak
-  | Transition of bool * FountainSpans * Range
-  | Centered of FountainSpans * Range
-
-  member fb.GetLength() : int =
-    match fb with
-    | Action(forced, spans, r)
-    | SceneHeading(forced, spans, r)
-    | Character(forced, spans, r)
-    | Transition(forced, spans, r) ->
-      spans
-      |> List.map( fun span -> span.GetLength() )
-      |> List.sum
-    | Dialogue(spans, r)
-    | Parenthetical(spans, r)
-    | Span(spans, r)
-    | Synopses (spans, r)
-    | Lyric(spans, r)
-    | Centered(spans, r) ->
-      spans
-      |> List.map( fun span -> span.GetLength() )
-      |> List.sum
-    | Section(int, spans, r) -> 
-      spans
-      |> List.map( fun span -> span.GetLength() )
-      |> List.sum
-    | PageBreak -> 3 //TODO: should we actually parse and keep the actual literal that folks use to define a pagebreak?
-  
-  member fs.GetRange(start:int):Range =
-    new Range(start, fs.GetLength() + start)
+  | Transition of bool * FountainSpans 
+  | Centered of FountainSpans 
+and FountainBlockElement = 
+  {value : FountainBlockElement; range : Range}
+  interface IRange with
+    member o.Length = o.range.length
+    member o.Location = o.range.location
+    
+    
+//  member fb.GetLength() : int =
+//    match fb with
+//    | Action(forced, spans, r)
+//    | SceneHeading(forced, spans, r)
+//    | Character(forced, spans, r)
+//    | Transition(forced, spans, r) ->
+//      spans
+//      |> List.map( fun span -> span.GetLength() )
+//      |> List.sum
+//    | Dialogue(spans, r)
+//    | Parenthetical(spans, r)
+//    | Span(spans, r)
+//    | Synopses (spans, r)
+//    | Lyric(spans, r)
+//    | Centered(spans, r) ->
+//      spans
+//      |> List.map( fun span -> span.GetLength() )
+//      |> List.sum
+//    | Section(int, spans, r) -> 
+//      spans
+//      |> List.map( fun span -> span.GetLength() )
+//      |> List.sum
+//    | PageBreak -> 3 //TODO: should we actually parse and keep the actual literal that folks use to define a pagebreak?
+//  
+//  member fs.GetRange(start:int):Range =
+//    new Range(start, fs.GetLength() + start)
 
 
 /// A type alias for a list of blocks
